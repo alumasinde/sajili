@@ -1,15 +1,30 @@
 # Database migrations
 
-Phase 1 intentionally contains only the migrations tracking table.
+Phase 2 separates the platform database from tenant data.
 
-Tenant and business tables will be introduced in later phases after the foundation is stable.
+## Platform database
 
-Migration rules:
+`database/migrations/platform/` contains platform-control-plane tables:
+
+- organizations
+- organization_domains
+- platform_migrations
+
+The platform database should contain only SaaS/control-plane data.
+
+## Tenant database
+
+`database/migrations/tenant/` is applied to the shared tenant database and later to each dedicated tenant database.
+
+Tenant-owned business tables will be added in later phases.
+
+## Rules
 
 - Use numbered migration filenames.
-- Never edit an already-applied production migration.
+- Never edit an applied production migration.
 - Add a new migration for schema changes.
-- Use InnoDB.
-- Use `utf8mb4`.
-- Do not use MySQL/MariaDB `ENUM`.
-- Add `organization_id` to tenant-owned tables when those modules are introduced.
+- Use InnoDB and utf8mb4.
+- Do not use MySQL/MariaDB ENUM.
+- Tenant-owned tables must carry `organization_id` when stored in the shared database.
+- Never trust `organization_id` from browser input; derive it from `TenantContext`.
+- Platform tables must never be exposed through tenant database connections.

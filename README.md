@@ -1,77 +1,125 @@
-# Employee Onboarding Platform — Phase 1
+# Employee Onboarding Platform
 
-This is the Phase 1 foundation for the Employee Onboarding & Asset Management Platform.
+PHP 8.3+ modular monolith for employee onboarding, IT asset handover, approvals and digital signatures.
 
-## What Phase 1 provides
+## Current state: Phase 2
 
-- PHP 8.3+ project structure
-- Composer PSR-4 autoloading
-- `.env` configuration
-- MySQL PDO database layer
+Phase 1 foundation has been hardened and Phase 2 adds the multi-tenant control plane.
+
+### Phase 1
+
+- PSR-4 Composer autoloading
+- HTTP request/response layer
+- Hardened router
+- Route groups and middleware
+- API versioning at `/api/v1`
+- MySQL PDO layer
 - Transaction support
-- Clean URL routing
-- `/api/v1` routing
-- HTTP request/response abstractions
-- Centralized logging
-- Basic security headers
-- Secure session configuration
+- Environment configuration
+- Security headers
+- Request IDs
 - CSRF utility
-- Migration foundation
-- PHPUnit setup
-- Minimal health endpoints
-- Enterprise-oriented CSS variables/base styling
-- No business modules yet
+- Centralized logging
+- PHPUnit foundation
+
+### Phase 2
+
+- Platform/control-plane database
+- Organization management
+- Company domains
+- Host-based tenant resolution
+- Tenant context
+- Shared database mode
+- Dedicated database mode
+- AES-256-GCM encrypted dedicated database configuration
+- Platform and tenant migration separation
+- Organization CLI provisioning
+- Tenant context API endpoint
+- Tenant isolation architecture
 
 ## Requirements
 
 - PHP 8.3+
 - Composer 2+
-- MySQL 8+ or MariaDB
-- PDO MySQL extension
-- PHPUnit through Composer
+- MySQL 8+ or MariaDB 10.6+
+- PDO MySQL
+- OpenSSL
+- XAMPP is fine for local development
 
-## Setup
+## Local setup
 
-1. Copy the environment file:
-
-```bash
-cp .env.example .env
-```
-
-2. Create the database:
+Create two databases:
 
 ```sql
 CREATE DATABASE onboarding_platform
   CHARACTER SET utf8mb4
   COLLATE utf8mb4_unicode_ci;
+
+CREATE DATABASE onboarding_tenants
+  CHARACTER SET utf8mb4
+  COLLATE utf8mb4_unicode_ci;
 ```
 
-3. Install dependencies:
+Copy `.env.example` to `.env` and configure both databases.
+
+Generate an application key:
+
+```bash
+php bin/console key:generate
+```
+
+Put the generated value into `APP_KEY` in `.env`.
+
+Install dependencies:
 
 ```bash
 composer install
 ```
 
-4. Run the development server:
+Run platform migrations:
+
+```bash
+php bin/console migrate:platform
+```
+
+Create a company using shared tenant storage:
+
+```bash
+php bin/console org:create --name="Glee Nairobi" --slug=glee-nairobi --domain=it.gleenairobi.co.ke --database-mode=shared
+```
+
+Run tenant migrations:
+
+```bash
+php bin/console migrate:tenant --organization=1
+```
+
+For local testing, map the company hostname in the Windows hosts file, for example:
+
+```text
+127.0.0.1 it.gleenairobi.co.ke
+```
+
+Then run:
 
 ```bash
 composer serve
 ```
 
-5. Open:
+Test:
 
 ```text
 http://127.0.0.1:8000/
-http://127.0.0.1:8000/health
 http://127.0.0.1:8000/api/v1/health
+http://it.gleenairobi.co.ke:8000/api/v1/tenant/context
 ```
 
-## Architecture direction
+## Architecture rule
 
-The application is a modular monolith.
+The application is a modular monolith:
 
 ```text
-HTTP
+Request
   ↓
 Router
   ↓
@@ -86,31 +134,58 @@ Repository
 Database
 ```
 
-Phase 1 deliberately does not add HRMS, employees, assets, onboarding or signatures. Those are later phases and should be added without breaking the foundation.
+Controllers should orchestrate HTTP concerns only. Business rules belong in services. SQL belongs in repositories. Views contain presentation only.
 
-## Security principles
+## Multi-tenancy rule
 
-- Never trust `organization_id` from browser input.
-- Tenant resolution will be introduced before tenant-owned modules.
-- Use prepared PDO statements.
-- Never store plaintext passwords.
-- Keep secrets in `.env`/secret management, never Git.
-- Keep private documents outside `public/`.
-- Do not expose stack traces in production.
-- Do not use database ENUMs.
-- Keep controllers thin.
-- Do not put SQL in controllers or views.
+Never trust this from browser input:
+
+```text
+organization_id
+```
+
+Tenant identity is established by the host/domain and stored in `TenantContext`.
+
+For shared database tables, services/repositories should obtain the organization ID from `TenantContext`.
+
+For dedicated databases, the connection is selected from the server-side organization record after tenant resolution.
+
+## Database separation
+
+```text
+                    PLATFORM DB
+                         │
+                 organizations
+                 organization_domains
+                         │
+                         │ resolve host
+                         ▼
+                    TenantContext
+                      /       \
+                     /         \
+                SHARED       DEDICATED
+                 DB              DB
+```
+
+The platform database is never exposed to normal tenant business queries.
+
+## No ENUMs
+
+The project deliberately avoids database `ENUM` columns. Statuses, modes and roles are represented using strings with application-level validation and, where useful, lookup tables.
+
+## Naming
+
+Use:
+
+```text
+first_name
+last_name
+```
+
+not `fullname`.
+
+Migrations are numbered and applied forward. Do not edit an already-applied production migration.
 
 ## Next phase
 
-Phase 2 should introduce:
-
-- Platform database
-- Organizations
-- Domains
-- Tenant resolver
-- Tenant context
-- Shared database mode
-- Dedicated database abstraction
-- Encrypted dedicated database credentials
-- Tenant isolation tests
+Phase 3 will build authentication, users, roles, permissions and department/HOD mapping on top of this tenant foundation.

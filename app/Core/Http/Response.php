@@ -10,6 +10,7 @@ final class Response
     {
         http_response_code($status);
         header('Content-Type: text/html; charset=UTF-8');
+        header('X-Content-Type-Options: nosniff');
         echo $html;
         exit;
     }
@@ -18,6 +19,8 @@ final class Response
     {
         http_response_code($status);
         header('Content-Type: application/json; charset=UTF-8');
+        header('Cache-Control: no-store');
+        header('X-Content-Type-Options: nosniff');
 
         echo json_encode(
             $data,

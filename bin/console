@@ -1,0 +1,126 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+require dirname(__DIR__) . '/vendor/autoload.php';
+
+use App\Core\Database\DatabaseManager;
+use App\Core\Database\MigrationRunner;
+use App\Core\Support\Env;
+use App\Core\Tenancy\TenantContext;
+use App\Modules\Organizations\Repositories\DomainRepository;
+use App\Modules\Organizations\Repositories\OrganizationRepository;
+use App\Modules\Organizations\Services\OrganizationService;
+
+Env::load(dirname(__DIR__));
+date_default_timezone_set(Env::get('APP_TIMEZONE', 'Africa/Nairobi'));
+
+$databases = new DatabaseManager();
+$command = $argv[1] ?? 'help';
+
+$options = [];
+foreach (array_slice($argv, 2) as $argument) {
+    if (str_starts_with($argument, '--') && str_contains($argument, '=')) {
+        [$key, $value] = explode('=', substr($argument, 2), 2);
+        $options[$key] = $value;
+    }
+}
+
+try {
+    switch ($command) {
+        case 'migrate:platform':
+            $platform = $databases->platform();
+            $count = (new MigrationRunner($platform))->up(
+                dirname(__DIR__) . '/database/migrations/platform',
+                'platform_migrations'
+            );
+            echo "Platform migrations applied: {$count}" . PHP_EOL;
+            break;
+
+        case 'migrate:tenant':
+            $id = (int) ($options['organization'] ?? 0);
+            if ($id < 1) {
+                throw new InvalidArgumentException('--organization=ID is required.');
+            }
+
+            $platform = $databases->platform();
+            $repo = new OrganizationRepository($platform);
+            $organization = $repo->findById($id);
+            if ($organization === null) {
+                throw new RuntimeException('Organization not found.');
+            }
+
+            $context = new TenantContext($databases);
+            $context->set($organization);
+            $count = (new MigrationRunner($context->connection()))->up(
+                dirname(__DIR__) . '/database/migrations/tenant',
+                'migrations'
+            );
+            $context->clear();
+
+            echo "Tenant migrations applied: {$count}" . PHP_EOL;
+            break;
+
+        case 'org:create':
+            $platform = $databases->platform();
+            $service = new OrganizationService(
+                $platform,
+                new OrganizationRepository($platform),
+                new DomainRepository($platform),
+            );
+
+            $id = $service->create([
+                'name' => $options['name'] ?? '',
+                'slug' => $options['slug'] ?? '',
+                'domain' => $options['domain'] ?? '',
+                'database_mode' => $options['database-mode'] ?? 'shared',
+                'database_host' => $options['database-host'] ?? null,
+                'database_port' => $options['database-port'] ?? 3306,
+                'database_name' => $options['database-name'] ?? null,
+                'database_username' => $options['database-username'] ?? null,
+                'database_password' => $options['database-password'] ?? null,
+            ]);
+
+            echo "Organization created: {$id}" . PHP_EOL;
+            break;
+
+        case 'org:add-domain':
+            $id = (int) ($options['organization'] ?? 0);
+            $domain = strtolower(trim((string) ($options['domain'] ?? '')));
+            if ($id < 1 || $domain === '') {
+                throw new InvalidArgumentException('--organization=ID and --domain=HOST are required.');
+            }
+
+            $platform = $databases->platform();
+            $repo = new OrganizationRepository($platform);
+            if ($repo->findById($id) === null) {
+                throw new RuntimeException('Organization not found.');
+            }
+
+            $domainRepo = new DomainRepository($platform);
+            $domainRepo->create($id, $domain, false);
+            echo "Domain added: {$domain}" . PHP_EOL;
+            break;
+
+        case 'key:generate':
+            echo 'APP_KEY=base64:' . base64_encode(random_bytes(32)) . PHP_EOL;
+            break;
+
+        default:
+            echo <<<TXT
+Onboarding Platform console
+
+Commands:
+  migrate:platform
+  migrate:tenant --organization=ID
+  org:create --name="Glee Nairobi" --slug=glee-nairobi --domain=it.gleenairobi.co.ke --database-mode=shared
+  org:create --name="Example" --slug=example --domain=it.example.com --database-mode=dedicated --database-host=127.0.0.1 --database-port=3306 --database-name=example_onboarding --database-username=user --database-password=secret
+  org:add-domain --organization=ID --domain=hr.gleenairobi.co.ke
+  key:generate
+TXT;
+    }
+} catch (Throwable $e) {
+    fwrite(STDERR, 'ERROR: ' . $e->getMessage() . PHP_EOL);
+    exit(1);
+}

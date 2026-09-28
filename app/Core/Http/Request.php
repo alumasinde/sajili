@@ -8,6 +8,8 @@ final class Request
 {
     private array $attributes = [];
 
+    private readonly string $requestId;
+
     private function __construct(
         private readonly string $method,
         private readonly string $path,
@@ -16,6 +18,7 @@ final class Request
         private readonly array $body,
         private readonly array $headers,
     ) {
+        $this->requestId = self::normalizeRequestId($headers);
     }
 
     public static function capture(): self
@@ -35,6 +38,11 @@ final class Request
         );
     }
 
+    public function requestId(): string
+    {
+        return $this->requestId;
+    }
+
     public function method(): string
     {
         return $this->method;
@@ -43,6 +51,11 @@ final class Request
     public function path(): string
     {
         return $this->path;
+    }
+
+    public function pathStartsWith(string $prefix): bool
+    {
+        return str_starts_with($this->path, $prefix);
     }
 
     public function host(): string
@@ -68,6 +81,17 @@ final class Request
     public function header(string $key, mixed $default = null): mixed
     {
         return $this->headers[strtolower($key)] ?? $default;
+    }
+
+    private static function normalizeRequestId(array $headers): string
+    {
+        $candidate = $headers['x-request-id'] ?? null;
+
+        if (is_string($candidate) && preg_match('/^[A-Za-z0-9._:-]{1,100}$/', $candidate)) {
+            return $candidate;
+        }
+
+        return bin2hex(random_bytes(16));
     }
 
     public function setAttribute(string $key, mixed $value): void
