@@ -12,6 +12,15 @@ use App\Core\Tenancy\TenantContext;
 use App\Modules\Organizations\Repositories\DomainRepository;
 use App\Modules\Organizations\Repositories\OrganizationRepository;
 use App\Modules\Organizations\Services\OrganizationService;
+use App\Modules\Roles\Repositories\RoleRepository;
+use App\Modules\Roles\Services\RoleService;
+use App\Modules\Access\Repositories\PermissionRepository;
+use App\Modules\Users\Repositories\UserRepository;
+use App\Modules\Users\Services\UserService;
+use App\Modules\Departments\Repositories\DepartmentRepository;
+use App\Modules\Departments\Repositories\DepartmentHodRepository;
+use App\Modules\Departments\Services\DepartmentHodService;
+use App\Modules\Departments\Services\DepartmentService;
 
 Env::load(dirname(__DIR__));
 date_default_timezone_set(Env::get('APP_TIMEZONE', 'Africa/Nairobi'));
@@ -28,6 +37,24 @@ foreach (array_slice($argv, 2) as $argument) {
 }
 
 try {
+    $tenantContextFor = static function (int $organizationId) use ($databases): TenantContext {
+        if ($organizationId < 1) {
+            throw new InvalidArgumentException('--organization=ID is required.');
+        }
+
+        $platform = $databases->platform();
+        $organization = (new OrganizationRepository($platform))->findById($organizationId);
+
+        if ($organization === null) {
+            throw new RuntimeException('Organization not found.');
+        }
+
+        $context = new TenantContext($databases);
+        $context->set($organization);
+
+        return $context;
+    };
+
     switch ($command) {
         case 'migrate:platform':
             $platform = $databases->platform();
@@ -107,6 +134,76 @@ try {
             echo 'APP_KEY=base64:' . base64_encode(random_bytes(32)) . PHP_EOL;
             break;
 
+
+        case 'roles:seed':
+            $id = (int) ($options['organization'] ?? 0);
+            $context = $tenantContextFor($id);
+
+            (new RoleService(
+                new RoleRepository($context),
+                new PermissionRepository($context),
+            ))->seedDefaults();
+
+            $context->clear();
+            echo "Default roles seeded for organization: {$id}" . PHP_EOL;
+            break;
+
+        case 'department:create':
+            $id = (int) ($options['organization'] ?? 0);
+            $context = $tenantContextFor($id);
+
+            $departmentId = (new DepartmentService(
+                new DepartmentRepository($context)
+            ))->create([
+                'name' => $options['name'] ?? '',
+                'slug' => $options['slug'] ?? '',
+            ]);
+
+            $context->clear();
+            echo "Department created: {$departmentId}" . PHP_EOL;
+            break;
+
+        case 'user:create':
+            $id = (int) ($options['organization'] ?? 0);
+            $context = $tenantContextFor($id);
+
+            $userId = (new UserService(
+                new UserRepository($context),
+                new RoleRepository($context),
+            ))->create([
+                'first_name' => $options['first-name'] ?? '',
+                'last_name' => $options['last-name'] ?? '',
+                'email' => $options['email'] ?? '',
+                'password' => $options['password'] ?? '',
+                'department_id' => $options['department'] ?? null,
+                'role' => $options['role'] ?? 'employee',
+            ]);
+
+            $context->clear();
+            echo "User created: {$userId}" . PHP_EOL;
+            break;
+
+        case 'department:set-hod':
+            $organizationId = (int) ($options['organization'] ?? 0);
+            $departmentId = (int) ($options['department'] ?? 0);
+            $userId = (int) ($options['user'] ?? 0);
+
+            if ($departmentId < 1 || $userId < 1) {
+                throw new InvalidArgumentException('--department=ID and --user=ID are required.');
+            }
+
+            $context = $tenantContextFor($organizationId);
+            (new DepartmentHodService(
+                new DepartmentRepository($context),
+                new DepartmentHodRepository($context),
+                new UserRepository($context),
+                new RoleRepository($context),
+            ))->assign($departmentId, $userId);
+            $context->clear();
+
+            echo "Department HOD assigned." . PHP_EOL;
+            break;
+
         default:
             echo <<<TXT
 Onboarding Platform console
@@ -117,6 +214,10 @@ Commands:
   org:create --name="Glee Nairobi" --slug=glee-nairobi --domain=it.gleenairobi.co.ke --database-mode=shared
   org:create --name="Example" --slug=example --domain=it.example.com --database-mode=dedicated --database-host=127.0.0.1 --database-port=3306 --database-name=example_onboarding --database-username=user --database-password=secret
   org:add-domain --organization=ID --domain=hr.gleenairobi.co.ke
+  roles:seed --organization=ID
+  department:create --organization=ID --name="Information Technology" --slug=it
+  user:create --organization=ID --first-name="Jane" --last-name="Wanjiku" --email="jane@example.com" --password="ChangeMe12345!" --role=it-admin --department=1
+  department:set-hod --organization=ID --department=1 --user=1
   key:generate
 TXT;
     }

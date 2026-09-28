@@ -17,6 +17,7 @@ final class Request
         private readonly array $query,
         private readonly array $body,
         private readonly array $headers,
+        private readonly string $rawBody,
     ) {
         $this->requestId = self::normalizeRequestId($headers);
     }
@@ -27,14 +28,31 @@ final class Request
         $path = parse_url($uri, PHP_URL_PATH) ?: '/';
 
         $headers = function_exists('getallheaders') ? getallheaders() : [];
+        $headers = array_change_key_case($headers, CASE_LOWER);
+        $rawBody = (string) file_get_contents('php://input');
+        $body = $_POST;
+
+        $contentType = strtolower((string) ($headers['content-type'] ?? ''));
+
+        if (str_contains($contentType, 'application/json') && $rawBody !== '') {
+            try {
+                $decoded = json_decode($rawBody, true, 512, JSON_THROW_ON_ERROR);
+                if (is_array($decoded)) {
+                    $body = $decoded;
+                }
+            } catch (\JsonException) {
+                $body = [];
+            }
+        }
 
         return new self(
             strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET'),
             $path,
             $_SERVER['HTTP_HOST'] ?? 'localhost',
             $_GET,
-            $_POST,
-            array_change_key_case($headers, CASE_LOWER),
+            $body,
+            $headers,
+            $rawBody,
         );
     }
 
@@ -76,6 +94,19 @@ final class Request
     public function all(): array
     {
         return $this->body;
+    }
+
+    public function rawBody(): string
+    {
+        return $this->rawBody;
+    }
+
+    public function isJson(): bool
+    {
+        return str_contains(
+            strtolower((string) $this->header('content-type', '')),
+            'application/json'
+        );
     }
 
     public function header(string $key, mixed $default = null): mixed

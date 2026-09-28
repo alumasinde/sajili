@@ -79,7 +79,21 @@ final class Router
         $fullPath = $fullPath === '/' ? '/' : rtrim($fullPath, '/');
 
         foreach (array_merge($this->groupMiddleware, $middleware) as $item) {
-            if (!is_string($item) || !is_a($item, MiddlewareInterface::class, true)) {
+            if (!is_string($item)) {
+                throw new RuntimeException('Invalid route middleware.');
+            }
+
+            if (str_starts_with($item, 'permission:')) {
+                $permission = substr($item, strlen('permission:'));
+
+                if ($permission === '' || !preg_match('/^[a-z0-9_.-]+$/', $permission)) {
+                    throw new RuntimeException('Invalid permission middleware.');
+                }
+
+                continue;
+            }
+
+            if (!is_a($item, MiddlewareInterface::class, true)) {
                 throw new RuntimeException('Invalid route middleware.');
             }
         }
@@ -166,8 +180,20 @@ final class Router
                 return;
             }
 
-            $class = $middleware[$index++];
-            $instance = $this->container->make($class);
+            $definition = $middleware[$index++];
+
+            if (str_starts_with($definition, 'permission:')) {
+                $this->request->setAttribute(
+                    'required_permission',
+                    substr($definition, strlen('permission:'))
+                );
+                $instance = $this->container->make(
+                    \App\Modules\Auth\Middleware\PermissionMiddleware::class
+                );
+            } else {
+                $instance = $this->container->make($definition);
+            }
+
             $instance->handle($this->request, $this->response, $next);
         };
 

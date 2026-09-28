@@ -3,7 +3,7 @@
   "description": "Employee onboarding and asset handover platform - Phase 1 foundation",
   "type": "project",
   "require": {
-    "php": "^8.3",
+    "php": "^8.2",
     "ext-pdo": "*",
     "ext-pdo_mysql": "*",
     "ext-openssl": "*",

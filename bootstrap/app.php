@@ -25,6 +25,7 @@ $container = new Container();
 $container->instance(Request::class, $request);
 $container->instance(Response::class, $response);
 $container->instance(Logger::class, $logger);
+$container->instance(\App\Core\View::class, new \App\Core\View(dirname(__DIR__) . '/resources/views'));
 
 $databases = new \App\Core\Database\DatabaseManager();
 $tenantContext = new \App\Core\Tenancy\TenantContext($databases);

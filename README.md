@@ -2,7 +2,9 @@
 
 PHP 8.3+ modular monolith for employee onboarding, IT asset handover, approvals and digital signatures.
 
-## Current state: Phase 2
+## Current state: Phase 3
+
+This build is based on the latest working `sajili-main.zip` supplied for Phase 3.
 
 Phase 1 foundation has been hardened and Phase 2 adds the multi-tenant control plane.
 
@@ -186,6 +188,24 @@ not `fullname`.
 
 Migrations are numbered and applied forward. Do not edit an already-applied production migration.
 
+## Phase 3
+
+- Tenant-bound authentication
+- Secure sessions
+- JSON API login/logout/me
+- User accounts
+- Departments
+- Roles
+- Permissions
+- User-role mapping
+- Role-permission mapping
+- Department HOD mapping
+- Permission middleware
+- CSRF protection
+- Basic administration dashboard
+- User/department/role administration APIs
+- CLI bootstrap commands
+
 ## Next phase
 
-Phase 3 will build authentication, users, roles, permissions and department/HOD mapping on top of this tenant foundation.
+Phase 4 will build employees, HRMS/API integration, CSV/Excel imports and the employee identity/linking layer.
