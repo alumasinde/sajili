@@ -1,0 +1,7 @@
+.env
+/vendor/
+/storage/logs/*
+/storage/framework/
+/.phpunit.result.cache
+*.log
+.DS_Store
